@@ -2,7 +2,7 @@ export interface Project {
   name: string;
   description: string;
   tags: string[];
-  github: string;
+  github?: string;
   live?: string;
   year: number;
   wip?: boolean;
@@ -17,7 +17,6 @@ export const projects: Project[] = [
     name: "climbing-elo",
     description: "elo rating system for competitive climbing — tracks athlete rankings across IFSC events",
     tags: ["python", "flask", "sqlite"],
-    github: "https://github.com/milwil-2/climb-elo",
     live: "https://climb-elo.vercel.app/",
     year: 2026,
     wip: true,
@@ -58,7 +57,6 @@ export const projects: Project[] = [
     name: "chess-nn",
     description: "AlphaZero-style chess engine built from scratch — a self-trained residual CNN policy/value network driven by Monte-Carlo Tree Search",
     tags: ["python", "pytorch", "mcts", "cnn"],
-    github: "https://github.com/milwil-2/chess-nn",
     live: "https://chess-nn.vercel.app/",
     year: 2025,
     summary: {
@@ -78,7 +76,6 @@ export const projects: Project[] = [
     name: "business-network",
     description: "graph of a B2B trade & trust network — verified company profiles linked by trade relationships, with calculated trust scores and hybrid GraphRAG question answering",
     tags: ["python", "fastapi", "neo4j", "groq"],
-    github: "https://github.com/milwil-2/business-network",
     live: "https://business-network-app.vercel.app/",
     year: 2026,
     summary: {

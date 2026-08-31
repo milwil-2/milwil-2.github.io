@@ -16,7 +16,9 @@ const { project } = Astro.props;
       {project.live && (
         <a href={project.live} target="_blank" rel="noopener noreferrer" class="badge">Live</a>
       )}
-      <a href={project.github} target="_blank" rel="noopener noreferrer" class="badge">GitHub</a>
+      {project.github && (
+        <a href={project.github} target="_blank" rel="noopener noreferrer" class="badge">GitHub</a>
+      )}
     </div>
   </div>
   <p class="desc">{project.description}</p>
