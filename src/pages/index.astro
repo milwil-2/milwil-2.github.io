@@ -1,39 +1,28 @@
 ---
+import Layout from '../layouts/Layout.astro';
 import Header from '../components/Header.astro';
 import ProjectCard from '../components/ProjectCard.astro';
 import { projects } from '../data/projects';
-import '../styles/global.css';
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="generator" content={Astro.generator} />
-    <meta name="description" content="milan willett — software projects" />
-    <title>milan willett</title>
-  </head>
-  <body>
-    <div class="container">
-      <Header />
+<Layout>
+  <Header />
 
-      <main id="projects">
-        <p class="section-label">projects</p>
-        <hr class="sep" />
-        {projects.map((project) => (
-          <ProjectCard project={project} />
-        ))}
-      </main>
-    </div>
-  </body>
-</html>
+  <main id="projects">
+    <p class="section-label">Projects</p>
+    <hr class="sep" />
+    {projects.map((project) => (
+      <ProjectCard project={project} />
+    ))}
+  </main>
+</Layout>
 
 <style>
   .section-label {
-    font-size: 0.75em;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
     color: var(--muted);
     margin-bottom: 0.5rem;
   }

@@ -8,42 +8,46 @@ interface Props {
 const { project } = Astro.props;
 ---
 
-<article class="card" data-card={project.summary ? '' : undefined}>
+<article class="card" data-card={project.summary ? '' : undefined} aria-expanded={project.summary ? 'false' : undefined}>
   <div class="card-header">
-    <span class="name">[ {project.name} ]</span>
+    <h2 class="name">{project.name}</h2>
     <div class="meta">
       <span class="year">{project.year}</span>
       {project.live && (
-        <a href={project.live} target="_blank" rel="noopener noreferrer" class="badge">live ↗</a>
+        <a href={project.live} target="_blank" rel="noopener noreferrer" class="badge">Live</a>
       )}
-      <a href={project.github} target="_blank" rel="noopener noreferrer" class="badge">github ↗</a>
+      <a href={project.github} target="_blank" rel="noopener noreferrer" class="badge">GitHub</a>
     </div>
   </div>
   <p class="desc">{project.description}</p>
   <p class="tags">
     {project.tags.join(' · ')}
-    {project.wip && <span class="wip">~ in development</span>}
+    {project.wip && <span class="wip">In development</span>}
   </p>
   {project.summary && (
-    <div class="summary">
-      <div class="summary-inner">
-        <p class="summary-label">current</p>
-        <ul class="dash-list">
-          {project.summary.current.map((item) => <li>{item}</li>)}
-        </ul>
-        <p class="summary-label">roadmap</p>
-        <ul class="dash-list">
-          {project.summary.future.map((item) => <li>{item}</li>)}
-        </ul>
-        <button class="collapse-btn" data-collapse>[ collapse ]</button>
+    <>
+      <p class="details-label" aria-hidden="true">Details</p>
+      <div class="summary">
+        <div class="summary-inner">
+          <p class="summary-label">Current</p>
+          <ul class="dash-list">
+            {project.summary.current.map((item) => <li>{item}</li>)}
+          </ul>
+          <p class="summary-label">Roadmap</p>
+          <ul class="dash-list">
+            {project.summary.future.map((item) => <li>{item}</li>)}
+          </ul>
+          <button class="collapse-btn" data-collapse>Close</button>
+        </div>
       </div>
-    </div>
+    </>
   )}
 </article>
 
 <style>
   .card {
-    padding: 1.25rem 1rem;
+    position: relative;
+    padding: 1.5rem 1rem;
     margin: 0 -1rem;
     border-bottom: 1px solid var(--border);
     border-radius: 4px;
@@ -68,74 +72,110 @@ const { project } = Astro.props;
   }
 
   .name {
-    color: var(--accent);
-    font-weight: 600;
-    letter-spacing: 0.02em;
+    font-size: 1.1875rem;
+    font-weight: 500;
+    color: var(--text);
   }
 
   .meta {
     display: flex;
-    align-items: center;
-    gap: 0.75rem;
+    align-items: baseline;
+    gap: 0.875rem;
     flex-shrink: 0;
   }
 
   .year {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
     color: var(--muted);
-    font-size: 0.85em;
+  }
+
+  @media (min-width: 760px) {
+    .year {
+      position: absolute;
+      right: calc(100% + 0.75rem);
+      top: 1.75rem;
+    }
   }
 
   .badge {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
     color: var(--muted);
-    font-size: 0.85em;
-    transition: color 0.15s;
-  }
-
-  .badge:hover {
-    color: var(--accent);
-    text-decoration: none;
   }
 
   .desc {
     color: var(--text);
-    font-size: 0.9em;
-    margin-bottom: 0.35rem;
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
   }
 
   .tags {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
     color: var(--muted);
-    font-size: 0.8em;
   }
 
   .wip {
     margin-left: 0.75rem;
-    color: #b8860b;
-    font-size: 0.8em;
+    font-family: var(--font-serif);
+    font-style: italic;
+    color: var(--muted);
+    white-space: nowrap;
   }
 
   .card[data-card] {
     cursor: pointer;
   }
 
+  .details-label {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--muted);
+    margin-top: 0.75rem;
+    transition: color 0.15s ease;
+  }
+
+  .card:hover .details-label {
+    color: var(--accent);
+  }
+
+  .card.open .details-label {
+    display: none;
+  }
+
   .summary {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease;
+    display: grid;
+    grid-template-rows: 0fr;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    .summary {
+      transition: grid-template-rows 0.3s ease;
+    }
   }
 
   .card.open .summary {
-    max-height: 600px;
+    grid-template-rows: 1fr;
   }
 
   .summary-inner {
-    padding-top: 1rem;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .summary-inner > :first-child {
+    margin-top: 1rem;
   }
 
   .summary-label {
-    color: var(--accent);
-    font-size: 0.75em;
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
     text-transform: uppercase;
-    letter-spacing: 0.12em;
+    letter-spacing: 0.14em;
+    color: var(--muted);
     margin-bottom: 0.4rem;
   }
 
@@ -146,25 +186,24 @@ const { project } = Astro.props;
   }
 
   .dash-list li {
-    color: #999;
-    font-size: 0.85em;
+    color: var(--muted);
+    font-size: 0.9375rem;
     line-height: 1.7;
     padding-left: 1.1rem;
     text-indent: -1.1rem;
   }
 
   .dash-list li::before {
-    content: "- ";
-    color: var(--muted);
+    content: "– ";
   }
 
   .collapse-btn {
     background: none;
     border: none;
     padding: 0;
-    font: inherit;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
     color: var(--muted);
-    font-size: 0.8em;
     cursor: pointer;
     transition: color 0.15s;
   }
@@ -177,18 +216,23 @@ const { project } = Astro.props;
 <script>
   const cards = document.querySelectorAll<HTMLElement>('[data-card]');
 
+  function setOpen(card: HTMLElement, open: boolean) {
+    card.classList.toggle('open', open);
+    card.setAttribute('aria-expanded', String(open));
+  }
+
   cards.forEach((card) => {
     card.addEventListener('click', (e) => {
       const target = e.target as HTMLElement;
       if (target.closest('a') || target.closest('[data-collapse]')) return;
 
       const isOpen = card.classList.contains('open');
-      cards.forEach((c) => c.classList.remove('open'));
-      if (!isOpen) card.classList.add('open');
+      cards.forEach((c) => setOpen(c, false));
+      if (!isOpen) setOpen(card, true);
     });
 
     card.querySelector('[data-collapse]')?.addEventListener('click', () => {
-      card.classList.remove('open');
+      setOpen(card, false);
     });
   });
 </script>
