@@ -1,61 +1,61 @@
 ---
+import ThemeToggle from './ThemeToggle.astro';
+
 const GITHUB = "https://github.com/milwil-2";
 const LINKEDIN = "https://www.linkedin.com/in/milanwillett/";
 ---
 
 <header>
-  <h1>milan willett</h1>
+  <div class="title-row">
+    <h1>Milan Willett</h1>
+    <ThemeToggle />
+  </div>
   <p class="bio">
-    uc berkeley — data science w/ emphasis in economics. building with
-    ai, ml, and computer vision. off the keyboard you'll find me climbing,
+    UC Berkeley - data science with an emphasis in economics. Building with
+    AI, ML, and computer vision. Off the keyboard you'll find me climbing,
     sailing, or drinking matcha.
   </p>
   <nav>
-    <a href={GITHUB} target="_blank" rel="noopener noreferrer">github ↗</a>
-    <span class="sep">·</span>
-    <a href={LINKEDIN} target="_blank" rel="noopener noreferrer">linkedin ↗</a>
+    <a href={GITHUB} target="_blank" rel="noopener noreferrer">GitHub</a>
+    <a href={LINKEDIN} target="_blank" rel="noopener noreferrer">LinkedIn</a>
   </nav>
 </header>
 
 <style>
   header {
-    margin-bottom: 0.375rem;
+    margin-bottom: 3rem;
+  }
+
+  .title-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 1rem;
+    margin-bottom: 1rem;
   }
 
   h1 {
-    font-size: 1.1em;
-    font-weight: 600;
+    font-size: 2rem;
+    font-weight: 500;
+    font-style: italic;
+    line-height: 1.2;
     color: var(--text);
-    letter-spacing: 0.04em;
-    margin-bottom: 0.75rem;
   }
 
   .bio {
-    color: #999;
-    font-size: 0.9em;
+    color: var(--muted);
     max-width: 52ch;
-    margin-bottom: 1rem;
-    padding-left: 1.25rem;
+    margin-bottom: 1.25rem;
   }
 
   nav {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    font-size: 0.85em;
+    gap: 1.25rem;
+    font-size: 0.9375rem;
   }
 
   nav a {
     color: var(--muted);
-    transition: color 0.15s;
-  }
-
-  nav a:hover {
-    color: var(--accent);
-    text-decoration: none;
-  }
-
-  .sep {
-    color: var(--border);
   }
 </style>

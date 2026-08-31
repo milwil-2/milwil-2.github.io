@@ -1,0 +1,56 @@
+<button class="theme-toggle" data-theme-toggle aria-label="Switch theme">
+  <svg class="icon-sun" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" aria-hidden="true">
+    <circle cx="8" cy="8" r="3.25" />
+    <path d="M8 1v1.5M8 13.5V15M15 8h-1.5M2.5 8H1M12.95 3.05l-1.06 1.06M4.11 11.89l-1.06 1.06M12.95 12.95l-1.06-1.06M4.11 4.11L3.05 3.05" />
+  </svg>
+  <svg class="icon-moon" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+    <path d="M13.5 9.5A6 6 0 0 1 6.5 2.5a6 6 0 1 0 7 7Z" />
+  </svg>
+</button>
+
+<style>
+  .theme-toggle {
+    background: none;
+    border: none;
+    padding: 0.25rem;
+    cursor: pointer;
+    color: var(--muted);
+    display: inline-flex;
+    align-items: center;
+    transition: color 0.15s ease;
+  }
+
+  .theme-toggle:hover {
+    color: var(--accent);
+  }
+
+  .icon-moon {
+    display: none;
+  }
+
+  :global([data-theme='dark']) .icon-sun {
+    display: none;
+  }
+
+  :global([data-theme='dark']) .icon-moon {
+    display: inline;
+  }
+</style>
+
+<script>
+  const button = document.querySelector<HTMLButtonElement>('[data-theme-toggle]');
+
+  function syncLabel() {
+    const dark = document.documentElement.dataset.theme === 'dark';
+    button?.setAttribute('aria-label', dark ? 'Switch to light theme' : 'Switch to dark theme');
+  }
+
+  button?.addEventListener('click', () => {
+    const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem('theme', next);
+    syncLabel();
+  });
+
+  syncLabel();
+</script>
