@@ -61,7 +61,6 @@ export const projects: Project[] = [
     github: "https://github.com/milwil-2/chess-nn",
     live: "https://chess-nn.vercel.app/",
     year: 2025,
-    wip: true,
     summary: {
       current: [
         "~5.6M-param residual CNN (10 SE-residual blocks) with an AlphaZero policy head and a 3-class WDL value head",
@@ -82,7 +81,6 @@ export const projects: Project[] = [
     github: "https://github.com/milwil-2/business-network",
     live: "https://business-network-app.vercel.app/",
     year: 2026,
-    wip: true,
     summary: {
       current: [
         "models companies, people, products, industries, and licenses as a neo4j graph linked by trade relationships (sells-to, supplies, references, and more)",
