@@ -1,6 +1,6 @@
 # portfolio
 
-Personal portfolio site — [milwil-2.github.io/portfolio](https://milwil-2.github.io/portfolio)
+Personal portfolio site — [milwil-2.github.io/portfolio](https://milwil-2.github.io)
 
 Built with Astro. Dark, monospace, minimal. Lists projects with links to GitHub and live demos where available.
 
