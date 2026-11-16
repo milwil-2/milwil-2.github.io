@@ -1,0 +1,2074 @@
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#000000">
+    <title>Milan Willett</title>
+    <!-- Keep these two descriptions in step with the bio paragraph below. -->
+    <meta name="description" content="Milan Willett is building Foundable. Data science and economics at UC Berkeley, working with AI, ML and computer vision.">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Milan Willett">
+    <meta property="og:description" content="Milan Willett is building Foundable. Data science and economics at UC Berkeley, working with AI, ML and computer vision.">
+    <meta name="twitter:card" content="summary">
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%23000'/%3E%3Cpath d='M16 7 L25.5 23.5 H6.5 Z' fill='none' stroke='%23fff' stroke-width='2.5' stroke-linejoin='round' stroke-dasharray='48 9'/%3E%3C/svg%3E">
+    <script>document.documentElement.classList.remove("no-js");</script>
+    <style>
+      :root {
+        color-scheme: dark;
+        --background: #000;
+        --text: #fff;
+        --quiet: rgba(255, 255, 255, 0.5);
+        --font: "Helvetica Neue", Helvetica, Arial, system-ui, sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        height: 100%;
+        margin: 0;
+        background: var(--background);
+        color: var(--text);
+      }
+
+      body {
+        overflow: hidden;
+        font-family: var(--font);
+      }
+
+      .stage {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        touch-action: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      .stage.is-over {
+        cursor: grab;
+      }
+
+      .stage.is-holding,
+      .stage.is-aiming {
+        cursor: grabbing;
+      }
+
+      .stage.can-putt {
+        cursor: crosshair;
+      }
+
+      /* The triangle is drawn letter by letter on one canvas the size of the page, so each letter
+         sits at its own place and angle on the line and stays sharp at any turn. Nothing the page
+         lays out makes the canvas redraw, unlike live svg text under a moving transform, which Chrome
+         re-lays out and redraws on every frame for seconds after any change to the page's layout. */
+      .shape {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        opacity: 0;
+        transition: opacity 500ms ease;
+      }
+
+      .is-ready .shape {
+        opacity: 1;
+      }
+
+      /* The golf course sits under the triangle: the hole, which sends out a slow ping so it is easy
+         to spot, and the bars a putt banks off. Each pops in, and pops out when the hole is done. */
+      .cup {
+        position: absolute;
+        width: 20px;
+        height: 20px;
+        margin: -10px 0 0 -10px;
+        border: 1.5px solid var(--text);
+        border-radius: 50%;
+        animation: pop-in 450ms cubic-bezier(0.3, 1.6, 0.5, 1) both;
+      }
+
+      .cup::after {
+        position: absolute;
+        inset: -22px;
+        border: 1px solid var(--text);
+        border-radius: 50%;
+        content: "";
+        opacity: 0;
+        animation: ping 1.8s cubic-bezier(0.2, 0.6, 0.4, 1) 450ms infinite;
+      }
+
+      .bar {
+        position: absolute;
+        border-radius: 999px;
+        background: var(--text);
+        transform: rotate(var(--turn));
+        animation: bar-in 500ms cubic-bezier(0.3, 1.3, 0.5, 1) both;
+      }
+
+      .cup.is-leaving {
+        animation: pop-out 320ms ease-in forwards;
+      }
+
+      .cup.is-leaving::after {
+        animation: none;
+      }
+
+      .bar.is-leaving {
+        animation: bar-out 320ms ease-in forwards;
+      }
+
+      @keyframes pop-in {
+        from {
+          transform: scale(0);
+        }
+      }
+
+      @keyframes pop-out {
+        to {
+          transform: scale(2.4);
+          opacity: 0;
+        }
+      }
+
+      @keyframes bar-in {
+        from {
+          transform: rotate(var(--turn)) scaleX(0);
+        }
+      }
+
+      @keyframes bar-out {
+        to {
+          transform: rotate(var(--turn)) scaleX(0);
+          opacity: 0;
+        }
+      }
+
+      @keyframes ping {
+        from {
+          transform: scale(0.2);
+          opacity: 0.6;
+        }
+        to {
+          transform: scale(1);
+          opacity: 0;
+        }
+      }
+
+      /* A hole's score rises from the hole. */
+      .gain {
+        position: absolute;
+        color: var(--text);
+        font-size: 15px;
+        white-space: nowrap;
+        pointer-events: none;
+        transform: translate(-50%, -50%);
+        animation: rise 1100ms cubic-bezier(0.2, 0.7, 0.3, 1) forwards;
+      }
+
+      @keyframes rise {
+        70% {
+          opacity: 1;
+        }
+        to {
+          transform: translate(-50%, calc(-50% - 32px));
+          opacity: 0;
+        }
+      }
+
+      /* Small quiet labels: the game's status line along the top, the links bottom left and the
+         controls bottom right. Links and controls stay out of sight until the mouse moves, a finger
+         touches the page or a key is pressed, so at rest the page is only the triangle. */
+      .hud,
+      .links,
+      .corner {
+        z-index: 2;
+        color: var(--quiet);
+        font-size: 13px;
+        letter-spacing: 0.01em;
+      }
+
+      .hud {
+        position: fixed;
+        top: 16px;
+        left: 50%;
+        display: none;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: baseline;
+        gap: 2px 16px;
+        width: max-content;
+        max-width: calc(100% - 32px);
+        padding: 0 10px;
+        border-radius: 12px;
+        /* Backed in the page's colour, so a golf bar running under it never runs through its words. */
+        background: var(--background);
+        text-align: center;
+        transform: translateX(-50%);
+      }
+
+      .is-playing .hud {
+        display: flex;
+      }
+
+      .links,
+      .corner {
+        position: fixed;
+        bottom: calc(14px + env(safe-area-inset-bottom, 0px));
+        display: flex;
+        gap: 16px;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 400ms ease;
+      }
+
+      .links {
+        left: 20px;
+      }
+
+      .corner {
+        right: 20px;
+      }
+
+      .show-controls .links,
+      .show-controls .corner,
+      .links:focus-within,
+      .corner:focus-within {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .is-playing .corner button {
+        display: none;
+      }
+
+      .links a,
+      .hud button,
+      .corner button {
+        padding: 6px 0;
+        border: 0;
+        background: none;
+        color: inherit;
+        font: inherit;
+        letter-spacing: inherit;
+        text-decoration: none;
+        cursor: pointer;
+      }
+
+      .hud button[hidden] {
+        display: none;
+      }
+
+      .links a:hover,
+      .links a:focus-visible,
+      .hud button:hover,
+      .hud button:focus-visible,
+      .corner button:hover,
+      .corner button:focus-visible {
+        color: var(--text);
+      }
+
+      a:focus-visible,
+      button:focus-visible {
+        outline: 1px solid currentColor;
+        outline-offset: 3px;
+      }
+
+      /* On a phone the links and the controls share one narrow bottom edge. */
+      @media (max-width: 420px) {
+        .links,
+        .corner {
+          gap: 12px;
+          font-size: 12px;
+        }
+
+        .links {
+          left: 16px;
+        }
+
+        .corner {
+          right: 16px;
+        }
+      }
+
+      /* The bio as plain text, for screen readers, search engines and copy-paste. */
+      .bio {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        margin: -1px;
+        padding: 0;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .shape,
+        .links,
+        .corner {
+          transition: none;
+        }
+
+        .cup,
+        .cup::after,
+        .bar,
+        .gain {
+          animation: none;
+        }
+
+        .cup.is-leaving,
+        .bar.is-leaving {
+          display: none;
+        }
+      }
+
+      /* Without JavaScript the triangle cannot be laid out, so the bio shows as a paragraph. */
+      .no-js .shape,
+      .no-js .corner {
+        display: none;
+      }
+
+      .no-js .links {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .no-js .stage {
+        display: grid;
+        place-items: center;
+        user-select: text;
+        -webkit-user-select: text;
+      }
+
+      .no-js .bio {
+        position: static;
+        width: auto;
+        max-width: 32ch;
+        height: auto;
+        margin: 0;
+        padding: 24px;
+        clip-path: none;
+        font-size: 18px;
+        line-height: 1.4;
+        text-align: center;
+        text-transform: lowercase;
+        white-space: normal;
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage">
+      <!-- Your bio. The triangle sizes itself to whatever you write here and sets it in lowercase. -->
+      <p class="bio" id="bio">Milan Willett is building Foundable. Data science and economics at UC Berkeley, working with AI, ML and computer vision.</p>
+      <canvas class="shape" aria-hidden="true"></canvas>
+    </main>
+    <div class="hud">
+      <span class="status" role="status" aria-live="polite"></span>
+      <button type="button" class="again" hidden>again</button>
+      <button type="button" class="quit">quit</button>
+    </div>
+    <nav class="links" aria-label="Elsewhere">
+      <a href="https://www.linkedin.com/in/milanwillett/">linkedin</a>
+      <a href="/projects/">projects</a>
+    </nav>
+    <div class="corner">
+      <button type="button" class="drop">drop</button>
+      <button type="button" class="play">play</button>
+    </div>
+    <script>
+      (() => {
+        const stage = document.querySelector(".stage");
+        const canvas = document.querySelector(".shape");
+        const context = canvas.getContext("2d");
+        const status = document.querySelector(".status");
+        const againButton = document.querySelector(".again");
+        const quitButton = document.querySelector(".quit");
+        const playButton = document.querySelector(".play");
+        const dropButton = document.querySelector(".drop");
+
+        // The bio runs once round the triangle in lowercase, then a short gap where it starts again.
+        const bio = document.getElementById("bio").textContent.trim().replace(/\s+/g, " ").toLowerCase();
+        const characters = Array.from(bio + "  ");
+
+        // Size
+        const MEASURE_SIZE = 100; // px; the bio is measured at this size to choose the type size
+        const FONT_SIZE = 22; // px
+        const FONT_SIZE_PHONE = 16; // px, on screens under 600 px wide
+        const CORNER = 1.2; // em; radius of the curve the letters take round each corner
+        // Round a corner the letters' middles run on a wider curve than the line they sit on, so there
+        // they are spaced at their middles: closer together on the line, evenly spaced to the eye.
+        const MIDLINE = 0.3; // em above the line
+        const ASCENT = 0.75; // em the letters stand above the line they sit on: the edge that meets a wall
+        const DESCENT = 0.25; // em they hang below it
+        const HOLE_INSET = 0.9; // em inside that line where the space the letters surround begins
+        const WIDEST = 0.72; // share of the page's short side the triangle may span
+        const WIDEST_PHONE = 0.84;
+        const START_MARGIN = 16; // px between the triangle and the top-left corner it starts in
+        const CONTROLS_LINGER = 2500; // ms the links and controls stay after the last movement
+
+        // Movement, in px and seconds
+        const DRIFT = 80; // speed the triangle drifts at when it is left alone
+        const SLOW_DOWN = 0.9; // how quickly a throw eases back to the drift, per second
+        const PICK_UP = 0.8; // how quickly a triangle that was stopped gets back to the drift, per second
+        const MAX_THROW = 3200;
+        const FLICK = 700; // speed a tap sends the spot it touches away at
+        const STEP = 1 / 240; // longest slice of time worked out at once, in seconds
+
+        // Bouncing. The triangle is a rigid body, so where it meets a wall decides how it comes off:
+        // a corner that lands first trips it into a spin, and a side that lands flat bounces it straight.
+        const BOUNCE = 0.9; // share of its speed into a wall a floating triangle keeps
+        const BOUNCE_DROPPED = 0.5; // the same with gravity on, so it comes to rest
+        const REST_SPEED = 30; // px a second; slower than this into a wall it stops rather than bounces
+        const GRIP = 0.4; // friction where a corner touches: how much of a slide along a wall becomes spin
+
+        // Spin, in degrees a second
+        const IDLE_SPIN = -6; // negative turns anticlockwise, like a ticker
+        const SPIN_SETTLE = 0.7; // how quickly a spin eases back to the idle turn, per second
+        const SPIN_BLEND = 0.04; // seconds over which a scroll changes the spin, never at once
+        const MAX_SPIN = 1440;
+
+        // Holding. The spot picked up follows the pointer on a stiff spring and the rest of the
+        // triangle hangs from it, so it swings when the hand moves and trails behind a long drag.
+        const HOLD_SPRING = 2 * Math.PI * 14; // radians a second; stiff, so a quick flick throws at the hand's speed
+        const HOLD_DAMPING = 1;
+        const HOLD_DRAG = 2; // per second; air on a held triangle, which turns it to trail the hand
+        const HOLD_SPIN_DAMPING = 2.5; // per second; a held triangle's swing dies down
+        const THROW_WINDOW = 100; // ms at the end of a drag that the hand's speed is read from
+        const THROW_SPAN = 10; // ms of movement needed before that speed can be read
+        const STILL = 80; // ms; a hand still this long has stopped
+
+        // Swatting: a mouse swept fast across the letters bats the triangle where it hits them.
+        const SWAT_SPEED = 1200; // px a second; slower than this the mouse passes over
+        const SWAT_SHARE = 0.8; // share of the mouse's speed the spot it hits takes
+        const SWAT_REST = 250; // ms before it can be swatted again
+
+        // Gravity, while drop is on
+        const GRAVITY = 2400; // px a second, every second
+        const AIR = 0.1; // share of its speed a falling triangle loses each second, roughly
+        const SETTLE_SPEED = 6; // px a second; slower than this on the floor it may come to rest
+        const SETTLE_SPIN = 0.05; // radians a second
+        const SETTLE_TIME = 0.3; // seconds it must stay that still
+        const TIP = 0.5; // radians a second a triangle balanced on a corner is tipped over with
+
+        // Squash on impact: the whole triangle flattens against the wall it hits, flattest at the
+        // moment it hits, then one soft wobble back. Its letters only ever move together, so a hit,
+        // however hard or often, never pushes one into another and the bio always reads.
+        const WOBBLE = 2 * Math.PI * 3.2; // radians a second
+        const WOBBLE_DAMPING = 0.4;
+        const SQUASH_MAX = 0.2;
+        const SQUASH_PER_SPEED = 0.0001; // flattening per px a second of impact
+        const SQUASH_MIN = 20; // px a second; a softer touch does not squash it
+
+        // Easter egg: spin swaps the shape. Spun hard, the triangle's corners blur round into a circle
+        // until it is the ring this site used to be, bio and all; spun hard again, the ring folds back
+        // into a triangle. The faster it spins, the further it goes towards the other shape.
+        const BLUR_START = 540; // degrees a second at which it starts to turn towards the other shape
+        const BLUR_FULL = 1080; // degrees a second at which it swaps
+        const MORPH_SPRING = 2 * Math.PI * 1.6; // radians a second; how quickly it changes shape
+
+        // The game: mini golf. Pull back anywhere to aim and let go to putt; the triangle slides, banks
+        // off the walls and the bars, and drops when it slows with the hole inside it. A round is
+        // three holes, laid out afresh each time.
+        const HOLES = 3;
+        const GOLF_ZOOM = 0.5; // the triangle shrinks to this share of its size to play
+        const ZOOM_SPRING = 2 * Math.PI * 1.8; // radians a second
+        const ZOOM_DAMPING = 0.7;
+        const GOLF_FRICTION = 1.4; // per second; the green slows a putt
+        const GOLF_BRAKE = 120; // px a second lost every second, so a putt ends rather than creeps
+        const GOLF_SPIN_FRICTION = 2.5; // per second
+        const GOLF_SPIN_BRAKE = 0.6; // radians a second lost every second
+        const GOLF_BOUNCE = 0.75; // share of its speed a putt keeps off a wall or a bar
+        const MAX_PULL = 0.32; // share of the page's short side a full-strength pull spans
+        const MAX_PUTT = 2600; // px a second at full strength
+        const MIN_PULL = 12; // px; a shorter pull is no shot
+        const SINK_SPEED = 260; // px a second; slower than this with the hole inside the triangle, it drops
+        const SINK_TIME = 450; // ms it takes to drop in
+        const BETWEEN = 1300; // ms from dropping in to the next hole
+        const CLEAR = 900; // ms from dropping in to the course popping out, before the next one pops in
+        const TEE_TIME = 600; // ms a new hole takes to pop in; it can be putted once it has
+        const MAX_STROKES = 8; // a hole not holed by then is picked up
+        const BAR = 6; // px; how thick the bars are
+        const BURST_TIME = 700; // ms the ring a holed putt sends out takes to open out and fade
+        const SCORE_NAMES = { "-2": "eagle", "-1": "birdie", 0: "par", 1: "bogey", 2: "double bogey" };
+
+        const BEST_KEY = "triangle-golf-round";
+        const DEG = Math.PI / 180;
+
+        const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+        const clamp = (value, low, high) => Math.min(high, Math.max(low, value));
+
+        let pageWidth = 0;
+        let pageHeight = 0;
+        let pixelRatio = 1;
+        let font = "";
+        let colour = "#fff";
+
+        // The triangle in its own px, its middle at 0, 0 and a corner pointing down. Its letters sit on
+        // a line of three straight sides joined by curves round the corners.
+        let fontSize = 0;
+        let perimeter = 0; // length of the letters' line
+        let side = 0; // length of each straight stretch of it
+        let circumradius = 0; // from the middle to the centre of each corner's curve
+        let cornerRadius = 0;
+        let ascent = 0;
+        let descent = 0;
+        let inertia = 0; // mean squared distance of the letters from the middle: how hard it is to turn
+        let ringRadius = 0; // the old ring's: the bio once round a circle at the same type size
+        let corners = [];
+        let normals = []; // pointing out of each side; side k runs from corner k to corner k + 1
+        let segments = [];
+        let glyphs = [];
+        let placed = false;
+
+        let zoom = 1; // the triangle's size now, as a share of its full size
+        let zoomSpeed = 0;
+        let zoomTarget = 1;
+        let x = 0; // its middle on the page
+        let y = 0;
+        let vx = 0;
+        let vy = 0;
+        let angle = 0; // radians, clockwise
+        let spin = 0; // radians a second
+        let spinKick = 0; // spin still to come from a scroll, blended in over SPIN_BLEND
+        // side: +1 when the last hit on that axis was the left or top wall, -1 for right or bottom
+        const squash = { x: { amount: 0, speed: 0, side: 1 }, y: { amount: 0, speed: 0, side: 1 } };
+        // How far the triangle has turned into the ring: morph runs on a spring towards its target, and
+        // bend is it eased, 0 a triangle and 1 the ring. Bending draws the corners' centres in towards
+        // the middle while it pushes the letters' line out from them, lineOut, so at 1 the corners meet
+        // and the line is a circle. shape.ring: which shape it is now; shape.armed: whether a hard spin
+        // can swap it, false from a swap until that spin has died down.
+        let morph = 0;
+        let morphSpeed = 0;
+        let bend = 0;
+        let lineOut = 0;
+        const shape = { ring: false, armed: true };
+        let dropped = false; // gravity on
+        let asleep = false; // lying still on the floor, not worked out until something moves it
+        let settled = 0; // seconds it has lain nearly still
+        let held = null;
+        let mouse = null;
+        let lastSwat = -Infinity;
+        let frameTime = 0;
+        let dirty = true;
+        const bursts = [];
+        const contacts = [];
+        let touching = 0; // which corners touched which walls and bars in the last slice: a bit for each pair
+        // state: "off"; "teeing" while a hole pops in; "ready" for a shot; "rolling"; "sinking" into the
+        // hole, or picked up; "between" holes; "over" once the round's score is up. round counts rounds
+        // started and quit, so a pause a quit round left running ends harmlessly.
+        const game = {
+          state: "off",
+          round: 0,
+          hole: 0,
+          par: 0,
+          strokes: 0,
+          total: 0,
+          parTotal: 0,
+          best: 0,
+          cup: null,
+          bars: [],
+          aim: null,
+          sink: null,
+          laid: 0, // holes laid out so far, so a hole's timer can tell it is still the one on the page
+        };
+        const inPlay = () => game.state !== "off" && game.state !== "over";
+
+        // Browser storage can be missing or refuse writes; the page works the same without it.
+        function readSetting(key) {
+          try {
+            return window.localStorage.getItem(key);
+          } catch {
+            return null;
+          }
+        }
+
+        function writeSetting(key, value) {
+          try {
+            window.localStorage.setItem(key, value);
+          } catch {}
+        }
+
+        // Size the triangle so the bio goes exactly once round it at a steady type size; only a very
+        // long bio, or a small screen, makes the type smaller to keep room for the triangle to travel.
+        function layout() {
+          const width = window.innerWidth;
+          const height = window.innerHeight;
+          const shortSide = Math.min(width, height);
+          // A window with no size yet (a background tab, say) gets laid out on its first resize.
+          if (shortSide < 1) return;
+          const style = getComputedStyle(document.documentElement);
+          const family = style.getPropertyValue("--font").trim() || "sans-serif";
+          colour = style.getPropertyValue("--text").trim() || "#fff";
+
+          context.font = `${MEASURE_SIZE}px ${family}`;
+          const totalEm = context.measureText(characters.join("")).width / MEASURE_SIZE;
+          if (!totalEm) return;
+          // The corners never take more than three fifths of the bio, so a short bio still has sides.
+          const cornerEm = clamp((0.6 * totalEm) / (2 * Math.PI) - MIDLINE, 0.2, CORNER);
+          const sideEm = Math.max(1, (totalEm - 2 * Math.PI * (cornerEm + MIDLINE)) / 3);
+          const phone = width < 600;
+          const widest = shortSide * (phone ? WIDEST_PHONE : WIDEST);
+          fontSize = Math.min(phone ? FONT_SIZE_PHONE : FONT_SIZE, widest / (sideEm + 2 * (cornerEm + ASCENT)));
+
+          // Each letter sits at the middle of its advance, measured together with the letters before
+          // it so their kerning is kept.
+          font = `${fontSize}px ${family}`;
+          context.font = font;
+          if ("fontKerning" in context) context.fontKerning = "normal";
+          const starts = [0];
+          for (let i = 1; i <= characters.length; i++) {
+            starts.push(context.measureText(characters.slice(0, i).join("")).width);
+          }
+          const total = starts[characters.length];
+          const resized = width !== pageWidth || height !== pageHeight;
+          pageWidth = width;
+          pageHeight = height;
+          cornerRadius = cornerEm * fontSize;
+          const midline = MIDLINE * fontSize;
+          side = Math.max(fontSize, (total - 2 * Math.PI * (cornerRadius + midline)) / 3);
+          perimeter = 3 * side + 2 * Math.PI * cornerRadius;
+          circumradius = side / Math.sqrt(3);
+          ascent = ASCENT * fontSize;
+          descent = DESCENT * fontSize;
+
+          // Corners clockwise from the top left, so side 0 runs along the top and the bio starts there.
+          const across = side / 2;
+          const down = circumradius / 2;
+          corners = [
+            { x: -across, y: -down },
+            { x: across, y: -down },
+            { x: 0, y: circumradius },
+          ];
+          normals = corners.map((from, k) => {
+            const to = corners[(k + 1) % 3];
+            return { x: (to.y - from.y) / side, y: -(to.x - from.x) / side };
+          });
+          segments = [];
+          for (let k = 0; k < 3; k++) {
+            const from = corners[k];
+            const to = corners[(k + 1) % 3];
+            const normal = normals[k];
+            segments.push({
+              curve: false,
+              length: side,
+              text: side, // length of bio it holds
+              x: from.x + normal.x * cornerRadius,
+              y: from.y + normal.y * cornerRadius,
+              dx: (to.x - from.x) / side,
+              dy: (to.y - from.y) / side,
+            });
+            segments.push({
+              curve: true,
+              length: (cornerRadius * 2 * Math.PI) / 3,
+              text: ((cornerRadius + midline) * 2 * Math.PI) / 3,
+              x: to.x,
+              y: to.y,
+              start: Math.atan2(normal.y, normal.x),
+            });
+          }
+
+          // The letters' weight lies evenly along their line.
+          const samples = 240;
+          let spread = 0;
+          for (let i = 0; i < samples; i++) {
+            const point = pointOnLine((i * perimeter) / samples);
+            spread += point.x * point.x + point.y * point.y;
+          }
+          inertia = spread / samples;
+
+          glyphs = characters.map((character, i) => {
+            const advance = starts[i + 1] - starts[i];
+            const point = pointOnLine(lineAtText(starts[i] + advance / 2));
+            return {
+              character,
+              blank: !character.trim(),
+              half: advance / 2,
+              x: point.x,
+              y: point.y,
+              tx: point.tx,
+              ty: point.ty,
+            };
+          });
+
+          // Each letter's place on the old ring, round from where it sits on the triangle so the change
+          // between them moves every letter as little as it can, and the turn that takes it there.
+          ringRadius = total / (2 * Math.PI);
+          const start = Math.atan2(glyphs[0].y, glyphs[0].x) - (2 * Math.PI * glyphs[0].half) / total;
+          glyphs.forEach((glyph, i) => {
+            const around = start + (2 * Math.PI * (starts[i] + glyph.half)) / total;
+            glyph.ringX = Math.cos(around) * ringRadius;
+            glyph.ringY = Math.sin(around) * ringRadius;
+            glyph.turnFrom = Math.atan2(glyph.ty, glyph.tx);
+            const turn = around + Math.PI / 2 - glyph.turnFrom;
+            glyph.turn = Math.atan2(Math.sin(turn), Math.cos(turn));
+          });
+          setBend(bend);
+
+          if (!placed) {
+            // The triangle starts in the top-left corner, point down, so the bio reads along its top.
+            placed = true;
+            x = across + cornerRadius + ascent + START_MARGIN;
+            y = down + cornerRadius + ascent + START_MARGIN;
+          }
+          keepInside();
+
+          // The canvas covers the page at the screen's own pixel density. Sizing it resets how it draws.
+          const ratio = window.devicePixelRatio || 1;
+          canvas.width = Math.max(1, Math.round(width * ratio));
+          canvas.height = Math.max(1, Math.round(height * ratio));
+          pixelRatio = canvas.width / width;
+          context.font = font;
+          if ("fontKerning" in context) context.fontKerning = "normal";
+          context.fillStyle = colour;
+          context.strokeStyle = colour;
+          context.textBaseline = "alphabetic";
+          context.textAlign = "left";
+          asleep = false;
+          dirty = true;
+          // Sizing the canvas cleared it, after this frame's drawing when a resize brought it here,
+          // so it is drawn again now rather than shown blank.
+          render();
+          if (resized && (game.state === "teeing" || game.state === "ready" || game.state === "rolling")) replayAfterResize();
+        }
+
+        // How far along the letters' line a point that far into the bio sits.
+        function lineAtText(text) {
+          let line = 0;
+          let rest = text;
+          for (const segment of segments) {
+            if (rest <= segment.text) return line + (rest * segment.length) / segment.text;
+            rest -= segment.text;
+            line += segment.length;
+          }
+          return line;
+        }
+
+        // The point at distance s along the letters' line, with the direction the line runs there.
+        function pointOnLine(s) {
+          let rest = ((s % perimeter) + perimeter) % perimeter;
+          for (let i = 0; i < segments.length; i++) {
+            const segment = segments[i];
+            if (rest <= segment.length || i === segments.length - 1) {
+              if (!segment.curve) {
+                return { x: segment.x + segment.dx * rest, y: segment.y + segment.dy * rest, tx: segment.dx, ty: segment.dy };
+              }
+              const turn = segment.start + rest / cornerRadius;
+              return {
+                x: segment.x + Math.cos(turn) * cornerRadius,
+                y: segment.y + Math.sin(turn) * cornerRadius,
+                tx: -Math.sin(turn),
+                ty: Math.cos(turn),
+              };
+            }
+            rest -= segment.length;
+          }
+        }
+
+        function setBend(value) {
+          bend = value;
+          lineOut = cornerRadius + (ringRadius - cornerRadius) * value;
+        }
+
+        // A corner's centre at the bend now, drawn in towards the middle as the triangle rounds.
+        function cornerOf(k) {
+          return { x: corners[k].x * (1 - bend), y: corners[k].y * (1 - bend) };
+        }
+
+        // Where a point on the page is, in the triangle's own px.
+        function toLocal(px, py) {
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          const dx = (px - x) / zoom;
+          const dy = (py - y) / zoom;
+          return { x: cos * dx + sin * dy, y: -sin * dx + cos * dy };
+        }
+
+        // How far a point in the triangle's own px is outside the triangle joining the corners'
+        // centres; negative inside it. The letters run at cornerRadius out from that triangle.
+        function cornerDistance(px, py) {
+          let nearest = Infinity;
+          let inside = true;
+          for (let k = 0; k < 3; k++) {
+            const from = cornerOf(k);
+            const to = cornerOf((k + 1) % 3);
+            const ex = to.x - from.x;
+            const ey = to.y - from.y;
+            const wx = px - from.x;
+            const wy = py - from.y;
+            const t = clamp((wx * ex + wy * ey) / (ex * ex + ey * ey || 1), 0, 1);
+            nearest = Math.min(nearest, Math.hypot(wx - ex * t, wy - ey * t));
+            if (wx * normals[k].x + wy * normals[k].y > 0) inside = false;
+          }
+          return inside ? -nearest : nearest;
+        }
+
+        // The way into the triangle at a point in its own px: square to the nearest side, or
+        // towards the nearest corner's centre beyond the end of a side.
+        function inwardAt(px, py) {
+          let best = Infinity;
+          let bestX = 0;
+          let bestY = 0;
+          let bestSide = 0;
+          let inside = true;
+          for (let k = 0; k < 3; k++) {
+            const from = cornerOf(k);
+            const to = cornerOf((k + 1) % 3);
+            const ex = to.x - from.x;
+            const ey = to.y - from.y;
+            const wx = px - from.x;
+            const wy = py - from.y;
+            const t = clamp((wx * ex + wy * ey) / (ex * ex + ey * ey || 1), 0, 1);
+            const distance = Math.hypot(wx - ex * t, wy - ey * t);
+            if (distance < best) {
+              best = distance;
+              bestX = from.x + ex * t;
+              bestY = from.y + ey * t;
+              bestSide = k;
+            }
+            if (wx * normals[k].x + wy * normals[k].y > 0) inside = false;
+          }
+          if (!inside && best > 0.5) return { x: (bestX - px) / best, y: (bestY - py) / best };
+          return { x: -normals[bestSide].x, y: -normals[bestSide].y };
+        }
+
+        // The triangle picks up anywhere on its letters or in the space they surround.
+        function isOver(px, py) {
+          const point = toLocal(px, py);
+          return cornerDistance(point.x, point.y) <= lineOut + ascent;
+        }
+
+        function isOnLetters(px, py) {
+          const point = toLocal(px, py);
+          const distance = cornerDistance(point.x, point.y);
+          return distance <= lineOut + ascent && distance >= lineOut - descent;
+        }
+
+        // How far the triangle reaches from its middle each way across the page, at its size and turn now.
+        function extent() {
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          const reach = (lineOut + ascent) * zoom;
+          let left = Infinity;
+          let right = -Infinity;
+          let top = Infinity;
+          let bottom = -Infinity;
+          for (let k = 0; k < 3; k++) {
+            const corner = cornerOf(k);
+            const ox = zoom * (cos * corner.x - sin * corner.y);
+            const oy = zoom * (sin * corner.x + cos * corner.y);
+            left = Math.min(left, ox);
+            right = Math.max(right, ox);
+            top = Math.min(top, oy);
+            bottom = Math.max(bottom, oy);
+          }
+          return { left: left - reach, right: right + reach, top: top - reach, bottom: bottom + reach };
+        }
+
+        // The whole triangle stays on the page; a page too small for it holds it in the middle.
+        function keepInside() {
+          const box = extent();
+          x = box.right - box.left >= pageWidth ? pageWidth / 2 - (box.left + box.right) / 2 : clamp(x, -box.left, pageWidth - box.right);
+          y = box.bottom - box.top >= pageHeight ? pageHeight / 2 - (box.top + box.bottom) / 2 : clamp(y, -box.top, pageHeight - box.bottom);
+        }
+
+        // A diagonal heading, so the triangle crosses the page rather than sliding along an edge.
+        function randomHeading() {
+          const quarter = Math.floor(Math.random() * 4) * (Math.PI / 2);
+          return quarter + (Math.PI / 180) * (25 + Math.random() * 40);
+        }
+
+        function capSpin() {
+          spin = clamp(spin, -MAX_SPIN * DEG, MAX_SPIN * DEG);
+        }
+
+        // How hard the triangle is to turn, per unit of its weight, at its size and bend now: a ring's
+        // letters all sit as far out as its line. A triangle shrunk to nothing between holes is treated
+        // as small but solid, so no push divides by zero.
+        function turnInverse() {
+          const size = Math.max(zoom, 0.05);
+          return 1 / ((inertia + (ringRadius * ringRadius - inertia) * bend) * size * size);
+        }
+
+        // progress: how far through the frame's time this slice ends, from just above 0 to 1.
+        function step(dt, progress) {
+          if (game.state === "sinking") {
+            sinkStep(dt);
+            return;
+          }
+          // The triangle shrinks for the game and opens back out after it, on a soft spring.
+          if (reducedMotion.matches) {
+            zoom = zoomTarget;
+            zoomSpeed = 0;
+          } else {
+            zoomSpeed +=
+              (-ZOOM_SPRING * ZOOM_SPRING * (zoom - zoomTarget) - 2 * ZOOM_DAMPING * ZOOM_SPRING * zoomSpeed) * dt;
+            zoom += zoomSpeed * dt;
+            if (Math.abs(zoom - zoomTarget) < 1e-4 && Math.abs(zoomSpeed) < 1e-3) {
+              zoom = zoomTarget;
+              zoomSpeed = 0;
+            }
+          }
+          reshape(dt);
+          if (spinKick) {
+            const blend = spinKick * (1 - Math.exp(-dt / SPIN_BLEND));
+            spinKick = Math.abs(spinKick - blend) < 1e-4 ? 0 : spinKick - blend;
+            spin += blend;
+            asleep = false;
+          }
+          if (dropped && !asleep) {
+            vy += GRAVITY * dt;
+            const air = Math.exp(-AIR * dt);
+            vx *= air;
+            vy *= air;
+            spin *= air;
+          }
+          if (held) {
+            const drag = Math.exp(-HOLD_DRAG * dt);
+            vx *= drag;
+            vy *= drag;
+            spin *= Math.exp(-HOLD_SPIN_DAMPING * dt);
+            hold(dt, progress);
+          } else if (inPlay()) {
+            roll(dt);
+          } else if (!dropped) {
+            drift(dt);
+            const idle = reducedMotion.matches ? 0 : IDLE_SPIN * DEG;
+            spin = idle + (spin - idle) * Math.exp(-(reducedMotion.matches ? 3 : SPIN_SETTLE) * dt);
+            if (Math.abs(spin - idle) < 1e-4) spin = idle;
+          }
+          capSpin();
+          if (!asleep && game.state !== "between") {
+            x += vx * dt;
+            y += vy * dt;
+            angle = (angle + spin * dt) % (2 * Math.PI);
+            settle(collide(), dt);
+          }
+          if (game.state === "rolling") checkPutt();
+          wobble(dt);
+        }
+
+        // Easter egg: spinning swaps the shape. The faster it spins, the further it turns towards the
+        // other shape, and spun up to BLUR_FULL, even for a moment, it swaps: a spin this fast soon goes
+        // into knocks off the walls. A swapped shape holds until its spin has died down below
+        // BLUR_START, so one long spin swaps it only once. The game is played with the triangle, and
+        // with reduced motion nothing spins, so nothing swaps.
+        function reshape(dt) {
+          const speed = Math.abs(spin) / DEG;
+          const playing = inPlay();
+          if (!playing && !reducedMotion.matches) {
+            if (shape.armed && speed >= BLUR_FULL) {
+              shape.ring = !shape.ring;
+              shape.armed = false;
+            } else if (!shape.armed && speed < BLUR_START) {
+              shape.armed = true;
+            }
+          }
+          const swaps = !playing && !reducedMotion.matches;
+          const towards = swaps && shape.armed ? clamp((speed - BLUR_START) / (BLUR_FULL - BLUR_START), 0, 1) : 0;
+          const target = !playing && shape.ring ? 1 - towards : towards;
+          if (reducedMotion.matches) {
+            morphSpeed = 0;
+            if (morph !== target) {
+              morph = target;
+              setBend(target);
+              asleep = false;
+            }
+            return;
+          }
+          if (morph === target && !morphSpeed) return;
+          morphSpeed += (MORPH_SPRING * MORPH_SPRING * (target - morph) - 2 * MORPH_SPRING * morphSpeed) * dt;
+          morph = clamp(morph + morphSpeed * dt, 0, 1);
+          if (Math.abs(morph - target) < 1e-4 && Math.abs(morphSpeed) < 1e-3) {
+            morph = target;
+            morphSpeed = 0;
+          }
+          setBend(morph * morph * (3 - 2 * morph));
+          // A changing shape may no longer rest as it lay.
+          asleep = false;
+        }
+
+        // A thrown triangle slows to a steady drift, and a stopped one picks the drift back up.
+        function drift(dt) {
+          let speed = Math.hypot(vx, vy);
+          const target = reducedMotion.matches ? 0 : DRIFT;
+          if (speed < 0.01) {
+            if (!target) {
+              vx = 0;
+              vy = 0;
+              return;
+            }
+            const heading = randomHeading();
+            speed = 0.01;
+            vx = Math.cos(heading) * speed;
+            vy = Math.sin(heading) * speed;
+          }
+          const rate = speed > target ? (reducedMotion.matches ? 3 : SLOW_DOWN) : PICK_UP;
+          const next = target + (speed - target) * Math.exp(-rate * dt);
+          vx *= next / speed;
+          vy *= next / speed;
+        }
+
+        // On the green a putt slides to a stop and its spin dies away; nothing drifts.
+        function roll(dt) {
+          const speed = Math.hypot(vx, vy);
+          if (speed > 0) {
+            const next = Math.max(0, speed * Math.exp(-GOLF_FRICTION * dt) - GOLF_BRAKE * dt);
+            vx *= next / speed;
+            vy *= next / speed;
+          }
+          const turn = Math.abs(spin);
+          if (turn > 0) {
+            const next = Math.max(0, turn * Math.exp(-GOLF_SPIN_FRICTION * dt) - GOLF_SPIN_BRAKE * dt);
+            spin *= next / turn;
+          }
+        }
+
+        // The held spot is pulled to the pointer by a spring with a damper, worked out as one push
+        // through the whole triangle (Box2D's mouse joint): the push both moves the triangle and turns
+        // it about its middle, by as much as its weight and its spread let it. The pointer moves once
+        // a frame, so each slice of the frame aims at its share of that move rather than all of it.
+        function hold(dt, progress) {
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          const rx = zoom * (cos * held.localX - sin * held.localY);
+          const ry = zoom * (sin * held.localX + cos * held.localY);
+          const inverse = turnInverse();
+          const still = frameTime - held.lastMove > STILL;
+          const handX = still ? 0 : held.speedX;
+          const handY = still ? 0 : held.speedY;
+          const aimX = held.fromX + (held.targetX - held.fromX) * progress;
+          const aimY = held.fromY + (held.targetY - held.fromY) * progress;
+          const stiffness = HOLD_SPRING * HOLD_SPRING;
+          const damper = 2 * HOLD_DAMPING * HOLD_SPRING;
+          const soft = 1 / (dt * (damper + dt * stiffness));
+          const pull = stiffness / (damper + dt * stiffness);
+          const wantX = -(vx - spin * ry - handX + pull * (x + rx - aimX));
+          const wantY = -(vy + spin * rx - handY + pull * (y + ry - aimY));
+          const a = 1 + inverse * ry * ry + soft;
+          const b = -inverse * rx * ry;
+          const d = 1 + inverse * rx * rx + soft;
+          const det = a * d - b * b;
+          const pushX = (d * wantX - b * wantY) / det;
+          const pushY = (a * wantY - b * wantX) / det;
+          vx += pushX;
+          vy += pushY;
+          spin += inverse * (rx * pushY - ry * pushX);
+        }
+
+        // Every corner that has reached a wall makes a contact, as does every bar the triangle meets in
+        // the game, and the pushes they give are worked out over all of them together, a few times
+        // over, so a triangle lying on two corners rests rather than rocks. Returns how many corners
+        // touch the floor, and whether a side wall holds it too.
+        function collide() {
+          const reach = (lineOut + ascent) * zoom;
+          const inverse = turnInverse();
+          const box = extent();
+          const fitsAcross = box.right - box.left < pageWidth;
+          const fitsDown = box.bottom - box.top < pageHeight;
+          if (!fitsAcross) {
+            x = pageWidth / 2 - (box.left + box.right) / 2;
+            vx = 0;
+          }
+          if (!fitsDown) {
+            y = pageHeight / 2 - (box.top + box.bottom) / 2;
+            vy = 0;
+          }
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          contacts.length = 0;
+          let outLeft = 0;
+          let outRight = 0;
+          let outTop = 0;
+          let outBottom = 0;
+          let floor = 0;
+          let wall = false;
+          for (let k = 0; k < 3; k++) {
+            const corner = cornerOf(k);
+            const ox = zoom * (cos * corner.x - sin * corner.y);
+            const oy = zoom * (sin * corner.x + cos * corner.y);
+            if (fitsAcross) {
+              const left = reach - (x + ox);
+              const right = x + ox + reach - pageWidth;
+              if (left > 0) {
+                touch(ox - reach, oy, 1, 0, k * 4);
+                outLeft = Math.max(outLeft, left);
+                wall = true;
+              } else if (right > 0) {
+                touch(ox + reach, oy, -1, 0, k * 4 + 1);
+                outRight = Math.max(outRight, right);
+                wall = true;
+              }
+            }
+            if (fitsDown) {
+              const top = reach - (y + oy);
+              const bottom = y + oy + reach - pageHeight;
+              if (top > 0) {
+                touch(ox, oy - reach, 0, 1, k * 4 + 2);
+                outTop = Math.max(outTop, top);
+              } else if (bottom > 0) {
+                touch(ox, oy + reach, 0, -1, k * 4 + 3);
+                outBottom = Math.max(outBottom, bottom);
+                floor++;
+              }
+            }
+          }
+          x += outLeft - outRight;
+          y += outTop - outBottom;
+          if (inPlay()) game.bars.forEach((bar, i) => meetBar(bar, reach, 12 + i));
+          const before = touching;
+          touching = 0;
+          if (!contacts.length) return { floor, wall };
+          for (let pass = 0; pass < 4; pass++) {
+            for (const contact of contacts) solve(contact, inverse);
+          }
+          capSpin();
+          // Only a corner arriving at a wall or a bar squashes the triangle; one resting or pressed on
+          // it does not. Two corners landing on one wall at once squash it once, as hard as the harder.
+          let hitX = null;
+          let hitY = null;
+          for (const contact of contacts) {
+            const bit = 1 << contact.pair;
+            touching |= bit;
+            if (before & bit || contact.knock <= SQUASH_MIN) continue;
+            if (Math.abs(contact.nx) >= Math.abs(contact.ny)) {
+              if (!hitX || contact.knock > hitX.knock) hitX = contact;
+            } else if (!hitY || contact.knock > hitY.knock) {
+              hitY = contact;
+            }
+          }
+          if (hitX) press(squash.x, Math.sign(hitX.nx), hitX.knock);
+          if (hitY) press(squash.y, Math.sign(hitY.ny), hitY.knock);
+          return { floor, wall };
+        }
+
+        // The triangle touches something at (rx, ry) from its middle, and (nx, ny) points away from
+        // that thing, back into the open. pair names the corner and wall, or the bar.
+        function touch(rx, ry, nx, ny, pair) {
+          const into = (vx - spin * ry) * nx + (vy + spin * rx) * ny; // negative while moving into it
+          // A hand pressing the triangle into a wall holds it there; it never bounces off and back.
+          const bounce = held ? 0 : inPlay() ? GOLF_BOUNCE : dropped ? (reducedMotion.matches ? 0 : BOUNCE_DROPPED) : BOUNCE;
+          contacts.push({
+            pair,
+            rx,
+            ry,
+            nx,
+            ny,
+            target: into < -REST_SPEED ? -bounce * into : 0,
+            knock: Math.max(0, -into),
+            normal: 0,
+            friction: 0,
+          });
+        }
+
+        // A bar meets the triangle where the gap between the bar's line and the triangle joining the
+        // corners' centres is less than the corners' reach and half the bar's thickness. The triangle
+        // is moved out of the bar at once and the bar pushes back like a wall.
+        function meetBar(bar, reach, pair) {
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          let best = null;
+          for (let k = 0; k < 3; k++) {
+            const from = cornerOf(k);
+            const to = cornerOf((k + 1) % 3);
+            const near = closestBetween(
+              x + zoom * (cos * from.x - sin * from.y),
+              y + zoom * (sin * from.x + cos * from.y),
+              x + zoom * (cos * to.x - sin * to.y),
+              y + zoom * (sin * to.x + cos * to.y),
+              bar.ax,
+              bar.ay,
+              bar.bx,
+              bar.by,
+            );
+            near.gap = Math.hypot(near.px - near.qx, near.py - near.qy);
+            if (!best || near.gap < best.gap) best = near;
+          }
+          const limit = reach + BAR / 2;
+          if (best.gap >= limit) return;
+          let nx = best.px - best.qx;
+          let ny = best.py - best.qy;
+          if (best.gap > 1e-6) {
+            nx /= best.gap;
+            ny /= best.gap;
+          } else {
+            // The bar's line has reached the corners' triangle itself: out from it towards the middle.
+            nx = x - best.qx;
+            ny = y - best.qy;
+            const length = Math.hypot(nx, ny) || 1;
+            nx /= length;
+            ny /= length;
+          }
+          touch(best.px - nx * reach - x, best.py - ny * reach - y, nx, ny, pair);
+          x += nx * (limit - best.gap);
+          y += ny * (limit - best.gap);
+        }
+
+        // The closest points of two segments, p on the first and q on the second (after Ericson,
+        // Real-Time Collision Detection, 5.1.9).
+        function closestBetween(p1x, p1y, q1x, q1y, p2x, p2y, q2x, q2y) {
+          const d1x = q1x - p1x;
+          const d1y = q1y - p1y;
+          const d2x = q2x - p2x;
+          const d2y = q2y - p2y;
+          const rx = p1x - p2x;
+          const ry = p1y - p2y;
+          const a = d1x * d1x + d1y * d1y;
+          const e = d2x * d2x + d2y * d2y;
+          const f = d2x * rx + d2y * ry;
+          let s = 0;
+          let t = 0;
+          if (a > 1e-9 && e > 1e-9) {
+            const b = d1x * d2x + d1y * d2y;
+            const c = d1x * rx + d1y * ry;
+            const denominator = a * e - b * b;
+            s = denominator > 1e-9 ? clamp((b * f - c * e) / denominator, 0, 1) : 0;
+            t = (b * s + f) / e;
+            if (t < 0) {
+              t = 0;
+              s = clamp(-c / a, 0, 1);
+            } else if (t > 1) {
+              t = 1;
+              s = clamp((b - c) / a, 0, 1);
+            }
+          } else if (a > 1e-9) {
+            s = clamp(-(d1x * rx + d1y * ry) / a, 0, 1);
+          } else if (e > 1e-9) {
+            t = clamp(f / e, 0, 1);
+          }
+          return { px: p1x + d1x * s, py: p1y + d1y * s, qx: p2x + d2x * t, qy: p2y + d2y * t };
+        }
+
+        // One contact's push, square to the wall and then along it, held to what the wall can give:
+        // a wall only pushes, and its grip along itself is at most GRIP of its push.
+        function solve(contact, inverse) {
+          const { rx, ry, nx, ny } = contact;
+          const into = (vx - spin * ry) * nx + (vy + spin * rx) * ny;
+          const rn = rx * ny - ry * nx;
+          const normal = Math.max(0, contact.normal + (contact.target - into) / (1 + rn * rn * inverse));
+          const push = normal - contact.normal;
+          contact.normal = normal;
+          vx += push * nx;
+          vy += push * ny;
+          spin += rn * push * inverse;
+
+          const tx = -ny;
+          const ty = nx;
+          const slide = (vx - spin * ry) * tx + (vy + spin * rx) * ty;
+          const rt = rx * ty - ry * tx;
+          const limit = GRIP * contact.normal;
+          const friction = clamp(contact.friction - slide / (1 + rt * rt * inverse), -limit, limit);
+          const rub = friction - contact.friction;
+          contact.friction = friction;
+          vx += rub * tx;
+          vy += rub * ty;
+          spin += rt * rub * inverse;
+        }
+
+        // With gravity on, a triangle lying still on the floor is put to rest, so it never shivers on
+        // its corners; anything that moves it wakes it.
+        function settle({ floor, wall }, dt) {
+          const lying = floor >= 2 || (floor >= 1 && wall);
+          const slow = Math.hypot(vx, vy) < SETTLE_SPEED && Math.abs(spin) < SETTLE_SPIN;
+          if (dropped && !held && floor === 1 && !wall && slow && Math.cos(3 * angle) > 0.999) {
+            // Stood still on a corner pointing straight down, a triangle dropped point down would
+            // balance there for ever; a lean tips it the way it already leans, as a real one would fall.
+            spin = (Math.sin(3 * angle) < 0 ? -1 : 1) * TIP;
+          }
+          if (dropped && !held && lying && slow) {
+            settled += dt;
+            if (settled >= SETTLE_TIME) {
+              asleep = true;
+              vx = 0;
+              vy = 0;
+              spin = 0;
+            }
+          } else {
+            settled = 0;
+          }
+        }
+
+        // Sends the spot at (px, py) on the page along the unit direction (dx, dy) at `speed`, unless it
+        // is already going that fast that way. The push goes through the whole triangle, so the part
+        // of it that misses the middle turns it.
+        function push(px, py, dx, dy, speed) {
+          const inverse = turnInverse();
+          const rx = px - x;
+          const ry = py - y;
+          const along = (vx - spin * ry) * dx + (vy + spin * rx) * dy;
+          if (along >= speed) return;
+          const rd = rx * dy - ry * dx;
+          const amount = (speed - along) / (1 + rd * rd * inverse);
+          vx += amount * dx;
+          vy += amount * dy;
+          spin += rd * amount * inverse;
+          capSpin();
+          asleep = false;
+        }
+
+        // A tap pokes the triangle where it touched it, straight into it from there: a poke near the
+        // middle of a side pushes it away, one near a corner sets it spinning.
+        function poke(px, py) {
+          const local = toLocal(px, py);
+          const inward = inwardAt(local.x, local.y);
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          push(px, py, cos * inward.x - sin * inward.y, sin * inward.x + cos * inward.y, FLICK);
+        }
+
+        // A hit flattens the triangle against what it came in on, the more the harder it came in.
+        // side: +1 when that was to its left or above it, -1 to its right or below.
+        function press(axis, side, speed) {
+          if (reducedMotion.matches) return;
+          axis.side = side;
+          axis.amount = Math.min(axis.amount + speed * SQUASH_PER_SPEED, SQUASH_MAX);
+        }
+
+        // Each squash springs back to the triangle's own shape with one soft wobble.
+        function wobble(dt) {
+          for (const axis of [squash.x, squash.y]) {
+            if (!axis.amount && !axis.speed) continue;
+            axis.speed += (-WOBBLE * WOBBLE * axis.amount - 2 * WOBBLE_DAMPING * WOBBLE * axis.speed) * dt;
+            axis.amount += axis.speed * dt;
+            if (Math.abs(axis.amount) < 1e-4 && Math.abs(axis.speed) < 1e-3) {
+              axis.amount = 0;
+              axis.speed = 0;
+            }
+          }
+        }
+
+        // Each letter is drawn on its own at its place and angle on the line, turned and placed with the
+        // triangle, then squashed with it: pressed flat against the wall it last hit, about the
+        // triangle's own edge on that side, and a little wider across the other way.
+        function render() {
+          const ratio = pixelRatio;
+          context.setTransform(1, 0, 0, 1, 0, 0);
+          context.clearRect(0, 0, canvas.width, canvas.height);
+          if (!glyphs.length) return;
+          const cos = Math.cos(angle);
+          const sin = Math.sin(angle);
+          const pressX = clamp(squash.x.amount, -SQUASH_MAX, SQUASH_MAX);
+          const pressY = clamp(squash.y.amount, -SQUASH_MAX, SQUASH_MAX);
+          const box = extent();
+          const edgeX = x + (squash.x.side > 0 ? box.left : box.right);
+          const edgeY = y + (squash.y.side > 0 ? box.top : box.bottom);
+          const flatX = 1 - pressX;
+          const flatY = 1 - pressY;
+          const wideX = 1 + pressY * 0.5;
+          const wideY = 1 + pressX * 0.5;
+          const scaleX = flatX * wideX * zoom * ratio;
+          const scaleY = flatY * wideY * zoom * ratio;
+          if (zoom > 0) {
+            for (const glyph of glyphs) {
+              if (glyph.blank) continue;
+              let lx = glyph.x;
+              let ly = glyph.y;
+              let tx = glyph.tx;
+              let ty = glyph.ty;
+              if (bend) {
+                // Partway to the ring: that share of the way to the letter's place and turn there.
+                lx += (glyph.ringX - glyph.x) * bend;
+                ly += (glyph.ringY - glyph.y) * bend;
+                const turn = glyph.turnFrom + glyph.turn * bend;
+                tx = Math.cos(turn);
+                ty = Math.sin(turn);
+              }
+              const px = x + zoom * (cos * lx - sin * ly);
+              const py = y + zoom * (sin * lx + cos * ly);
+              const qx = x + wideX * (edgeX + flatX * (px - edgeX) - x);
+              const qy = y + wideY * (edgeY + flatY * (py - edgeY) - y);
+              const dx = cos * tx - sin * ty;
+              const dy = sin * tx + cos * ty;
+              context.setTransform(dx * scaleX, dy * scaleY, -dy * scaleX, dx * scaleY, qx * ratio, qy * ratio);
+              context.fillText(glyph.character, -glyph.half, 0);
+            }
+          }
+
+          context.setTransform(ratio, 0, 0, ratio, 0, 0);
+          // Aiming: dots from the triangle's middle the way the putt will go, more the harder.
+          const shot = game.aim && shotOf(game.aim);
+          if (shot) {
+            const count = Math.round(3 + shot.power * 13);
+            for (let i = 1; i <= count; i++) {
+              context.globalAlpha = 1 - (0.7 * i) / count;
+              context.beginPath();
+              context.arc(x + shot.x * i * 16, y + shot.y * i * 16, Math.max(1.2, 3 - i * 0.12), 0, 2 * Math.PI);
+              context.fill();
+            }
+          }
+
+          // A holed putt sends a ring out of the hole.
+          for (let i = bursts.length - 1; i >= 0; i--) {
+            const burst = bursts[i];
+            const t = (frameTime - burst.start) / BURST_TIME;
+            if (t >= 1 || reducedMotion.matches) {
+              bursts.splice(i, 1);
+              continue;
+            }
+            const eased = 1 - (1 - Math.max(0, t)) ** 3;
+            context.globalAlpha = 1 - eased;
+            context.lineWidth = 1;
+            context.beginPath();
+            context.arc(burst.x, burst.y, 10 + 70 * eased, 0, 2 * Math.PI);
+            context.stroke();
+          }
+          context.globalAlpha = 1;
+        }
+
+        // Nothing to draw again while the triangle lies still and nothing else on the canvas moves.
+        function isStill() {
+          return (
+            !held &&
+            !game.aim &&
+            !morphSpeed &&
+            game.state !== "sinking" &&
+            (asleep || (vx === 0 && vy === 0 && spin === 0 && !spinKick)) &&
+            !squash.x.amount &&
+            !squash.y.amount &&
+            !bursts.length &&
+            zoom === zoomTarget
+          );
+        }
+
+        function setDropped(on) {
+          dropped = on;
+          asleep = false;
+          settled = 0;
+          dropButton.textContent = on ? "float" : "drop";
+        }
+
+        // Play: a round of mini golf. The triangle leaves where it is and comes up on the first tee.
+        function startGame() {
+          game.round += 1;
+          setDropped(false);
+          // The ring, if it is one, is a triangle again for the game, and stays one after it.
+          morph = 0;
+          morphSpeed = 0;
+          shape.ring = false;
+          shape.armed = true;
+          setBend(0);
+          if (held) {
+            held = null;
+            stage.classList.remove("is-holding");
+          }
+          game.hole = 0;
+          game.total = 0;
+          game.parTotal = 0;
+          game.aim = null;
+          game.best = Number(readSetting(BEST_KEY)) || 0;
+          document.body.classList.add("is-playing");
+          againButton.hidden = true;
+          quitButton.textContent = "quit";
+          nextHole();
+        }
+
+        // The next hole: the course pops in and the triangle comes up on the tee; after the last
+        // hole, the round's score.
+        function nextHole() {
+          clearCourse();
+          game.hole += 1;
+          if (game.hole > HOLES) {
+            finishRound();
+            return;
+          }
+          const hole = layoutHole(game.hole);
+          game.par = hole.par;
+          game.parTotal += hole.par;
+          game.strokes = 0;
+          game.cup = { x: hole.cup.x, y: hole.cup.y, element: makeCup(hole.cup.x, hole.cup.y) };
+          game.bars = hole.bars.map((bar, i) => ({ ...bar, element: makeBar(bar, 60 + i * 80) }));
+          x = hole.tee.x;
+          y = hole.tee.y;
+          vx = 0;
+          vy = 0;
+          spin = 0;
+          spinKick = 0;
+          zoom = 0;
+          zoomSpeed = 0;
+          zoomTarget = GOLF_ZOOM;
+          touching = 0;
+          game.state = "teeing";
+          const laid = ++game.laid;
+          later(reducedMotion.matches ? 0 : TEE_TIME, () => {
+            if (game.laid === laid && game.state === "teeing") game.state = "ready";
+          });
+          dirty = true;
+          const hint = game.hole === 1 ? " · pull back to aim, let go to putt" : "";
+          say(`hole ${game.hole} of ${HOLES} · par ${game.par}${hint}`);
+        }
+
+        // A page that changes size mid-hole gets the hole laid out afresh for its new size, since the
+        // old layout may not fit it, once the resizing stops, so a drag at the window's edge does not
+        // deal a new course every frame. Its strokes stand.
+        let replayTimer = 0;
+        function replayAfterResize() {
+          clearTimeout(replayTimer);
+          const round = game.round;
+          replayTimer = setTimeout(() => {
+            const midHole = game.state === "teeing" || game.state === "ready" || game.state === "rolling";
+            if (game.round === round && midHole) replayHole();
+          }, 250);
+        }
+
+        function replayHole() {
+          const strokes = game.strokes;
+          game.hole -= 1;
+          game.parTotal -= game.par;
+          game.aim = null;
+          nextHole();
+          game.strokes = strokes;
+          if (strokes) say(`hole ${game.hole} of ${HOLES} · par ${game.par} · ${plural(strokes, "stroke")}`);
+        }
+
+        // A hole laid out by the triangle's size at play, so every gap lets it through: the tee near one
+        // end of the page's long side, the hole near the other, and bars between that ask more of each
+        // hole: a post to go round, then a wall or a gate, then two walls to weave through.
+        function layoutHole(number) {
+          const reach = (circumradius + cornerRadius + ascent) * GOLF_ZOOM; // middle to the furthest corner
+          const span = (side + 2 * (cornerRadius + ascent)) * GOLF_ZOOM; // widest across
+          const gap = span * 1.4;
+          const wide = pageWidth >= pageHeight;
+          const long = wide ? pageWidth : pageHeight;
+          const short = wide ? pageHeight : pageWidth;
+          // u runs along the long side from the tee's end, v across it; on a tall page the tee is at the bottom.
+          const onPage = (u, v) => (wide ? { x: u, y: v } : { x: v, y: long - u });
+          const margin = reach + 12;
+          const clearance = reach + BAR / 2 + 10;
+          const across = () => margin + Math.random() * Math.max(0, short - 2 * margin);
+          const first = Math.random() < 0.5 ? "wall" : "gate";
+          const kinds = number === 1 ? ["post"] : number === 2 ? [first, first === "wall" ? "gate" : "wall"] : ["zigzag", "wall"];
+          for (const kind of [...kinds, "open"]) {
+            if ((kind === "wall" || kind === "zigzag") && short - gap < span * 0.5) continue;
+            if (kind === "gate" && short - gap < 2 * span * 0.3) continue;
+            for (let tries = 0; tries < 40; tries++) {
+              const tee = { u: margin + Math.random() * long * 0.05, v: across() };
+              const cup = { u: long - margin - Math.random() * long * 0.05, v: across() };
+              const bars = [];
+              let par = 2;
+              if (kind === "post") {
+                // Square across the straight line from tee to hole, at its middle.
+                const mu = (tee.u + cup.u) / 2;
+                const mv = (tee.v + cup.v) / 2;
+                const length = Math.hypot(cup.u - tee.u, cup.v - tee.v);
+                const du = (cup.u - tee.u) / length;
+                const dv = (cup.v - tee.v) / length;
+                const half = span * 0.45;
+                bars.push([mu - dv * half, mv + du * half, mu + dv * half, mv - du * half]);
+              } else if (kind === "wall") {
+                const u = long * (0.45 + Math.random() * 0.1);
+                bars.push(Math.random() < 0.5 ? [u, 0, u, short - gap] : [u, gap, u, short]);
+                par = 3;
+              } else if (kind === "gate") {
+                const u = long * (0.45 + Math.random() * 0.1);
+                const middle = gap / 2 + span * 0.3 + Math.random() * (short - gap - 2 * span * 0.3);
+                bars.push([u, 0, u, middle - gap / 2], [u, middle + gap / 2, u, short]);
+                par = 3;
+              } else if (kind === "zigzag") {
+                const u1 = long * 0.37;
+                const u2 = long * 0.63;
+                if (u2 - u1 < span * 1.2) break;
+                const top = Math.random() < 0.5;
+                bars.push(top ? [u1, 0, u1, short - gap] : [u1, gap, u1, short]);
+                bars.push(top ? [u2, gap, u2, short] : [u2, 0, u2, short - gap]);
+                par = 4;
+              }
+              const clear = bars.every(([au, av, bu, bv]) =>
+                [tee, cup].every((point) => distanceToSegment(point.u, point.v, au, av, bu, bv) > clearance),
+              );
+              if (!clear) continue;
+              return {
+                par,
+                tee: onPage(tee.u, tee.v),
+                cup: onPage(cup.u, cup.v),
+                bars: bars.map(([au, av, bu, bv]) => {
+                  const a = onPage(au, av);
+                  const b = onPage(bu, bv);
+                  return { ax: a.x, ay: a.y, bx: b.x, by: b.y };
+                }),
+              };
+            }
+          }
+          // A page too small for any bar gets an open green.
+          return { par: 2, tee: onPage(margin, short / 2), cup: onPage(long - margin, short / 2), bars: [] };
+        }
+
+        function distanceToSegment(px, py, ax, ay, bx, by) {
+          const ex = bx - ax;
+          const ey = by - ay;
+          const t = clamp(((px - ax) * ex + (py - ay) * ey) / (ex * ex + ey * ey || 1), 0, 1);
+          return Math.hypot(px - ax - ex * t, py - ay - ey * t);
+        }
+
+        function makeCup(left, top) {
+          const element = document.createElement("span");
+          element.className = "cup";
+          putAt(element, left, top);
+          stage.insertBefore(element, canvas);
+          return element;
+        }
+
+        function makeBar(bar, delay) {
+          const element = document.createElement("span");
+          const length = Math.hypot(bar.bx - bar.ax, bar.by - bar.ay) + BAR;
+          element.className = "bar";
+          element.style.width = `${length}px`;
+          element.style.height = `${BAR}px`;
+          element.style.margin = `${-BAR / 2}px 0 0 ${-length / 2}px`;
+          element.style.setProperty("--turn", `${Math.atan2(bar.by - bar.ay, bar.bx - bar.ax)}rad`);
+          element.style.animationDelay = `${delay}ms`;
+          putAt(element, (bar.ax + bar.bx) / 2, (bar.ay + bar.by) / 2);
+          stage.insertBefore(element, canvas);
+          return element;
+        }
+
+        function clearCourse() {
+          if (game.cup) leave(game.cup.element, "is-leaving");
+          for (const bar of game.bars) leave(bar.element, "is-leaving");
+          game.cup = null;
+          game.bars = [];
+        }
+
+        // The shot an aim makes: its direction, against the pull, and its strength from 0 to 1.
+        function shotOf(aim) {
+          const pullX = aim.fromX - aim.toX;
+          const pullY = aim.fromY - aim.toY;
+          const length = Math.hypot(pullX, pullY);
+          if (length < MIN_PULL) return null;
+          const full = MAX_PULL * Math.min(pageWidth, pageHeight);
+          return { x: pullX / length, y: pullY / length, power: Math.min(1, length / full) };
+        }
+
+        // Letting go putts: the triangle leaves against the pull, as hard as the pull was long.
+        function shoot() {
+          const shot = shotOf(game.aim);
+          game.aim = null;
+          dirty = true;
+          if (!shot) return;
+          vx = shot.x * shot.power * MAX_PUTT;
+          vy = shot.y * shot.power * MAX_PUTT;
+          game.strokes += 1;
+          game.total += 1;
+          game.state = "rolling";
+          say(`hole ${game.hole} of ${HOLES} · par ${game.par} · ${plural(game.strokes, "stroke")}`);
+        }
+
+        // A putt drops when it slows with the hole inside the triangle; one that stops anywhere else
+        // waits for the next shot, unless the hole's strokes have run out.
+        function checkPutt() {
+          const point = toLocal(game.cup.x, game.cup.y);
+          if (Math.hypot(vx, vy) < SINK_SPEED && cornerDistance(point.x, point.y) <= holeEdge()) {
+            startSink(game.cup.x, game.cup.y, false);
+          } else if (vx === 0 && vy === 0 && spin === 0) {
+            if (game.strokes >= MAX_STROKES) startSink(x, y, true);
+            else game.state = "ready";
+          }
+        }
+
+        // How far outside the corners' triangle the space inside the letters reaches: HOLE_INSET in from
+        // their line, and never less than the inner part of the triangle, however short the bio.
+        function holeEdge() {
+          return Math.max(cornerRadius - HOLE_INSET * fontSize, -circumradius / 4);
+        }
+
+        function startSink(toX, toY, pickedUp) {
+          game.state = "sinking";
+          game.sink = { start: frameTime, x, y, toX, toY, zoom, spin, pickedUp };
+          vx = 0;
+          vy = 0;
+          squash.x.amount = squash.x.speed = squash.y.amount = squash.y.speed = 0;
+        }
+
+        // Dropping in: the triangle slides to the hole's middle, spinning faster, and shrinks into it.
+        function sinkStep(dt) {
+          const sink = game.sink;
+          const t = reducedMotion.matches ? 1 : clamp((frameTime - sink.start) / SINK_TIME, 0, 1);
+          const eased = t * t * (3 - 2 * t);
+          x = sink.x + (sink.toX - sink.x) * eased;
+          y = sink.y + (sink.toY - sink.y) * eased;
+          zoom = sink.zoom * (1 - eased);
+          zoomSpeed = 0;
+          spin = sink.spin + (sink.spin < 0 ? -1 : 1) * 12 * eased;
+          capSpin();
+          angle = (angle + spin * dt) % (2 * Math.PI);
+          if (t >= 1) holed();
+        }
+
+        // In: the hole's score rises from it, and the next hole follows after a moment.
+        function holed() {
+          const { pickedUp, toX, toY } = game.sink;
+          game.state = "between";
+          game.sink = null;
+          zoom = 0;
+          zoomTarget = 0;
+          vx = 0;
+          vy = 0;
+          spin = 0;
+          dirty = true;
+          const name = pickedUp ? "picked up" : holeScore(game.strokes, game.par);
+          say(`hole ${game.hole} · ${name}`);
+          if (!pickedUp) bursts.push({ x: toX, y: toY, start: frameTime });
+          rise(name, toX, toY - 24);
+          later(CLEAR, clearCourse);
+          later(BETWEEN, nextHole);
+        }
+
+        function holeScore(strokes, par) {
+          if (strokes === 1) return "hole in one";
+          return SCORE_NAMES[strokes - par] || plural(strokes, "stroke");
+        }
+
+        const toPar = (diff) => (diff === 0 ? "even" : diff > 0 ? `+${diff}` : `${diff}`);
+
+        // The round's done: its score against par and the best round kept, and the triangle comes
+        // back up out of the last hole at full size and drifts off again.
+        function finishRound() {
+          game.state = "over";
+          const newBest = !game.best || game.total < game.best;
+          if (newBest) writeSetting(BEST_KEY, String(game.total));
+          const record = newBest ? " · new best" : ` · best ${game.best}`;
+          say(`${HOLES} holes · ${plural(game.total, "stroke")} · ${toPar(game.total - game.parTotal)}${record}`);
+          againButton.hidden = false;
+          quitButton.textContent = "done";
+          zoomTarget = 1;
+          dirty = true;
+        }
+
+        function endGame() {
+          game.round += 1;
+          // The game's spin, from a bar or from dropping in, stays in the game.
+          spin = 0;
+          spinKick = 0;
+          clearCourse();
+          game.state = "off";
+          game.aim = null;
+          game.sink = null;
+          zoomTarget = 1;
+          dirty = true;
+          document.body.classList.remove("is-playing");
+          playButton.focus({ preventScroll: true });
+        }
+
+        // Runs after a pause, unless the round was quit or started again meanwhile.
+        function later(ms, then) {
+          const round = game.round;
+          setTimeout(() => {
+            if (game.round === round) then();
+          }, ms);
+        }
+
+        // An element pops out, then goes.
+        function leave(element, className) {
+          element.style.animationDelay = "0ms";
+          element.classList.add(className);
+          setTimeout(() => element.remove(), 400);
+        }
+
+        function putAt(element, left, top) {
+          element.style.left = `${left}px`;
+          element.style.top = `${top}px`;
+        }
+
+        function rise(text, left, top) {
+          const element = document.createElement("span");
+          element.className = "gain";
+          element.textContent = text;
+          putAt(element, left, top);
+          stage.appendChild(element);
+          setTimeout(() => element.remove(), 1200);
+        }
+
+        const plural = (count, word) => `${count} ${word}${count === 1 ? "" : "s"}`;
+
+        function say(text) {
+          if (status.textContent !== text) status.textContent = text;
+        }
+
+        function updateCursor() {
+          stage.classList.toggle("is-over", !inPlay() && !held && mouse !== null && isOver(mouse.x, mouse.y));
+          stage.classList.toggle("can-putt", game.state === "ready" && !game.aim);
+          stage.classList.toggle("is-aiming", !!game.aim);
+        }
+
+        // The links and controls come up with any movement and fade once it stops.
+        let controlsTimer = 0;
+        function showControls() {
+          document.body.classList.add("show-controls");
+          clearTimeout(controlsTimer);
+          controlsTimer = setTimeout(() => document.body.classList.remove("show-controls"), CONTROLS_LINGER);
+        }
+        window.addEventListener("pointermove", showControls, { passive: true });
+        window.addEventListener("pointerdown", showControls, { passive: true });
+        window.addEventListener("keydown", showControls);
+
+        stage.addEventListener("pointerdown", (event) => {
+          if (event.button !== 0 || held || game.aim || !glyphs.length) return;
+          if (inPlay()) {
+            // In the game a press anywhere starts aiming, once the triangle has stopped.
+            if (game.state !== "ready") return;
+            event.preventDefault();
+            try {
+              stage.setPointerCapture(event.pointerId);
+            } catch {}
+            game.aim = { pointerId: event.pointerId, fromX: event.clientX, fromY: event.clientY, toX: event.clientX, toY: event.clientY };
+            return;
+          }
+          if (!isOver(event.clientX, event.clientY)) return;
+          event.preventDefault();
+          try {
+            // Keeps the drag when the pointer leaves the window; the drag works without it.
+            stage.setPointerCapture(event.pointerId);
+          } catch {}
+          const local = toLocal(event.clientX, event.clientY);
+          held = {
+            pointerId: event.pointerId,
+            localX: local.x,
+            localY: local.y,
+            targetX: event.clientX,
+            targetY: event.clientY,
+            fromX: event.clientX, // where the pointer was at the end of the last frame
+            fromY: event.clientY,
+            speedX: 0,
+            speedY: 0,
+            downX: event.clientX,
+            downY: event.clientY,
+            downTime: event.timeStamp,
+            lastMove: event.timeStamp,
+            travelled: 0,
+            samples: [{ time: event.timeStamp, x: event.clientX, y: event.clientY }],
+          };
+          asleep = false;
+          stage.classList.add("is-holding");
+        });
+
+        stage.addEventListener("pointermove", (event) => {
+          if (event.pointerType === "mouse") {
+            if (!held && !event.buttons && !inPlay()) sweep(event);
+            mouse = { x: event.clientX, y: event.clientY, time: event.timeStamp };
+          }
+          // A mouse whose button came up out of the page's sight, say as the window lost focus, lets go.
+          const owner = held ? held.pointerId : game.aim ? game.aim.pointerId : null;
+          if (event.pointerType === "mouse" && !event.buttons && event.pointerId === owner) {
+            letGo(event);
+            return;
+          }
+          if (game.aim && event.pointerId === game.aim.pointerId) {
+            game.aim.toX = event.clientX;
+            game.aim.toY = event.clientY;
+            return;
+          }
+          if (!held || event.pointerId !== held.pointerId) return;
+          // The browser bundles a frame's worth of pointer movement into one event; every
+          // movement in it counts toward the hand's speed.
+          const moves = typeof event.getCoalescedEvents === "function" ? event.getCoalescedEvents() : [];
+          const samples = held.samples;
+          for (const move of moves.length ? moves : [event]) {
+            samples.push({ time: move.timeStamp, x: clamp(move.clientX, 0, pageWidth), y: clamp(move.clientY, 0, pageHeight) });
+          }
+          while (samples.length > 2 && event.timeStamp - samples[0].time > THROW_WINDOW) samples.shift();
+          held.targetX = clamp(event.clientX, 0, pageWidth);
+          held.targetY = clamp(event.clientY, 0, pageHeight);
+          held.lastMove = event.timeStamp;
+          held.travelled = Math.max(held.travelled, Math.hypot(event.clientX - held.downX, event.clientY - held.downY));
+          const hand = handSpeed(samples);
+          held.speedX = hand.x;
+          held.speedY = hand.y;
+        });
+
+        stage.addEventListener("pointerleave", (event) => {
+          if (event.pointerType === "mouse") mouse = null;
+        });
+
+        // A mouse that crosses the letters fast enough swats the triangle at the first letter it meets.
+        function sweep(event) {
+          if (!mouse || !glyphs.length || event.timeStamp - lastSwat < SWAT_REST) return;
+          const elapsed = event.timeStamp - mouse.time;
+          if (elapsed <= 0 || elapsed > 100) return;
+          const dx = event.clientX - mouse.x;
+          const dy = event.clientY - mouse.y;
+          const distance = Math.hypot(dx, dy);
+          const speed = (distance / elapsed) * 1000;
+          if (speed < SWAT_SPEED) return;
+          const steps = Math.ceil(distance / 3);
+          for (let i = 0; i <= steps; i++) {
+            const px = mouse.x + (dx * i) / steps;
+            const py = mouse.y + (dy * i) / steps;
+            if (!isOnLetters(px, py)) continue;
+            push(px, py, dx / distance, dy / distance, Math.min(speed, MAX_THROW) * SWAT_SHARE);
+            lastSwat = event.timeStamp;
+            return;
+          }
+        }
+
+        // The hand's speed, read from the end of the drag: a curve is fitted through where the
+        // pointer was over its last moments and its slope taken at the latest one, so the hand's speed
+        // is right even while it speeds up or slows down. (A line from the first of those moments to the
+        // last gives their average instead.)
+        function handSpeed(samples) {
+          const last = samples[samples.length - 1];
+          const recent = samples.filter((sample) => last.time - sample.time <= THROW_WINDOW);
+          const first = recent[0];
+          if (recent.length < 2 || last.time - first.time < THROW_SPAN) return { x: 0, y: 0 };
+          const speedX = speedAtEnd(recent, "x");
+          const speedY = speedAtEnd(recent, "y");
+          // A fitted curve can turn back at its very end; the hand never goes against the drag.
+          if (speedX * (last.x - first.x) + speedY * (last.y - first.y) < 0) return { x: 0, y: 0 };
+          return { x: speedX, y: speedY };
+        }
+
+        // Least squares for position = a + b·t + c·t², with t in seconds and 0 at the last sample,
+        // so b is the speed there. Too few samples for a curve get a straight line.
+        function speedAtEnd(samples, key) {
+          const end = samples[samples.length - 1];
+          const t = [0, 0, 0, 0, 0]; // sums of time to the powers 0 to 4
+          const p = [0, 0, 0]; // sums of position times time to the powers 0 to 2
+          for (const sample of samples) {
+            const time = (sample.time - end.time) / 1000;
+            const position = sample[key] - end[key];
+            for (let i = 0, power = 1; i < 5; i++, power *= time) {
+              t[i] += power;
+              if (i < 3) p[i] += position * power;
+            }
+          }
+          const line = (t[0] * p[1] - t[1] * p[0]) / (t[0] * t[2] - t[1] * t[1]);
+          if (samples.length < 3) return line;
+          const det =
+            t[0] * (t[2] * t[4] - t[3] * t[3]) -
+            t[1] * (t[1] * t[4] - t[3] * t[2]) +
+            t[2] * (t[1] * t[3] - t[2] * t[2]);
+          if (!(Math.abs(det) > 1e-18)) return line;
+          return (
+            (t[0] * (p[1] * t[4] - t[3] * p[2]) -
+              p[0] * (t[1] * t[4] - t[3] * t[2]) +
+              t[2] * (t[1] * p[2] - p[1] * t[2])) /
+            det
+          );
+        }
+
+        // Letting go leaves the triangle moving and turning as the hand had it; a tap pokes it. In
+        // the game, letting go putts. A drag that ends any other way (cancelled, its capture lost, its
+        // button up unseen) is let go without a poke or a putt.
+        function letGo(event) {
+          if (game.aim && event.pointerId === game.aim.pointerId) {
+            if (event.type === "pointerup") shoot();
+            else game.aim = null;
+            return;
+          }
+          if (!held || event.pointerId !== held.pointerId) return;
+          if (event.type === "pointerup" && held.travelled < 6 && event.timeStamp - held.downTime < 300) {
+            const cos = Math.cos(angle);
+            const sin = Math.sin(angle);
+            const spotX = x + zoom * (cos * held.localX - sin * held.localY);
+            const spotY = y + zoom * (sin * held.localX + cos * held.localY);
+            poke(spotX, spotY);
+          }
+          const speed = Math.hypot(vx, vy);
+          if (speed > MAX_THROW) {
+            vx *= MAX_THROW / speed;
+            vy *= MAX_THROW / speed;
+          }
+          held = null;
+          stage.classList.remove("is-holding");
+        }
+
+        stage.addEventListener("pointerup", letGo);
+        stage.addEventListener("pointercancel", letGo);
+        stage.addEventListener("lostpointercapture", letGo);
+
+        // A scroll or trackpad swipe sets the triangle spinning; in the game it stays as putted.
+        stage.addEventListener(
+          "wheel",
+          (event) => {
+            event.preventDefault();
+            if (inPlay()) return;
+            const unit = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? window.innerHeight : 1;
+            const turn = -(event.deltaY + event.deltaX) * unit;
+            asleep = false;
+            if (reducedMotion.matches) {
+              angle += turn * 0.2 * DEG;
+              dirty = true;
+            } else {
+              // Blended in over a moment, so a mouse wheel's notches turn it smoothly too.
+              spinKick = clamp(spin + spinKick + turn * 1.2 * DEG, -MAX_SPIN * DEG, MAX_SPIN * DEG) - spin;
+            }
+          },
+          { passive: false },
+        );
+
+        dropButton.addEventListener("click", () => setDropped(!dropped));
+        playButton.addEventListener("click", startGame);
+        againButton.addEventListener("click", startGame);
+        quitButton.addEventListener("click", endGame);
+        window.addEventListener("keydown", (event) => {
+          if (event.key === "Escape" && game.state !== "off") endGame();
+        });
+
+        let previous = null;
+        function frame(now) {
+          if (previous === null) previous = now;
+          // A tab coming back after a while carries on where it was rather than catching up.
+          const seconds = clamp((now - previous) / 1000, 0, 0.1);
+          previous = now;
+          frameTime = now;
+          // Nothing moves until the triangle has been laid out.
+          if (glyphs.length) {
+            // Each frame moves everything on by exactly the time since the last one, in equal
+            // slices no longer than STEP, so the motion stays even at any refresh rate.
+            const slices = Math.ceil(seconds / STEP);
+            for (let i = 0; i < slices; i++) step(seconds / slices, (i + 1) / slices);
+            if (held) {
+              held.fromX = held.targetX;
+              held.fromY = held.targetY;
+            }
+            updateCursor();
+            if (dirty || !isStill()) {
+              render();
+              dirty = false;
+            }
+          }
+          requestAnimationFrame(frame);
+        }
+
+        let resizing = false;
+        window.addEventListener("resize", () => {
+          if (resizing) return;
+          resizing = true;
+          requestAnimationFrame(() => {
+            resizing = false;
+            layout();
+          });
+        });
+
+        // Moving the window to a screen with a different pixel density redraws the canvas for it.
+        function watchPixelRatio() {
+          const query = window.matchMedia(`(resolution: ${window.devicePixelRatio}dppx)`);
+          query.addEventListener(
+            "change",
+            () => {
+              layout();
+              watchPixelRatio();
+            },
+            { once: true },
+          );
+        }
+
+        layout();
+        watchPixelRatio();
+        if (document.fonts) document.fonts.ready.then(layout);
+        document.documentElement.classList.add("is-ready");
+        // Show the links and controls for a moment on arrival, so visitors know they are there.
+        showControls();
+
+        if (!reducedMotion.matches) {
+          // Out of the corner: down and to the right.
+          const heading = (Math.PI / 180) * (25 + Math.random() * 40);
+          vx = Math.cos(heading) * DRIFT;
+          vy = Math.sin(heading) * DRIFT;
+          spin = IDLE_SPIN * DEG;
+        }
+        requestAnimationFrame(frame);
+      })();
+    </script>
+  </body>
+</html>

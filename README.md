@@ -1,14 +1,17 @@
 # portfolio
 
-Personal portfolio site — [milwil-2.github.io/portfolio](https://milwil-2.github.io)
+Personal site — [milwil-2.github.io](https://milwil-2.github.io)
 
-Built with Astro. Dark, monospace, minimal. Lists projects with links to GitHub and live demos where available.
+- `/` is `public/index.html`: one self-contained page, the bio round a triangle you can throw, spin and
+  drop, with mini golf behind "play". Astro copies it to the site's root as it is.
+- `/projects/` is the Astro page `src/pages/projects.astro`: dark, monospace, minimal. Lists projects
+  with links to GitHub and live demos where available.
 
 ## dev
 
 ```sh
 npm install
-npm run dev      # localhost:4321/portfolio
+npm run dev      # localhost:4321: the triangle at /, projects at /projects/
 npm run build    # output to dist/
 ```
 
